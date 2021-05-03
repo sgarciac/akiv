@@ -8,6 +8,6 @@ edition = "2018"
 structopt = "0.3"
 chrono = "0.4"
 parse_duration = "2.1.1"
-rusqlite = "0.25.1"
+rusqlite = {version = "0.25.1", features=["chrono"]}
 directories = "3.0.2"
 anyhow = "1.0.40"

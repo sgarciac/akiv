@@ -41,6 +41,7 @@ fn main() -> anyhow::Result<()> {
         Add {description, estimated_time} => {
             interface::add_task(journal_file, description, estimated_time.as_secs())
         },
+        List => interface::list(journal_file),
         _ => Ok(())
     }?;
     Ok(())
