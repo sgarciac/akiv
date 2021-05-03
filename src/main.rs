@@ -38,7 +38,9 @@ fn main() -> anyhow::Result<()> {
     // Perform the action.
     match action {
         Init => interface::init_journal(journal_file),
-        Add {description, estimated_time} => interface::add_task(journal_file, description, estimated_time),
+        Add {description, estimated_time} => {
+            interface::add_task(journal_file, description, estimated_time.as_secs())
+        },
         _ => Ok(())
     }?;
     Ok(())

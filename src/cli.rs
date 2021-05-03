@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 use structopt::StructOpt;
+use parse_duration::parse;
+use std::time::Duration;
 
 #[derive(Debug, StructOpt)]
 pub enum Command {
@@ -9,9 +11,9 @@ pub enum Command {
         #[structopt()]
         description: String,
 
-        /// The task estimated duration
-        #[structopt()]
-        estimated_time: usize,
+        /// The task estimated duration (parse_duration)
+        #[structopt(parse(try_from_str=parse))]
+        estimated_time: Duration,
     },
     /// Remove an entry from the journal file by position.
     Done {
@@ -27,7 +29,7 @@ pub enum Command {
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "Akiv",
-    about = "A ultra-minimalistic daily planner."
+    about = "A hyper-minimalistic daily planner."
 )]
 pub struct CommandLineArgs {
     #[structopt(subcommand)]
