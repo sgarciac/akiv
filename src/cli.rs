@@ -15,8 +15,8 @@ pub enum Command {
         #[structopt(parse(try_from_str=parse_duration))]
         estimated_time: Duration,
     },
-    /// Remove an entry from the journal file by position.
-    Done {
+    /// Remove a task.
+    Rm {
         #[structopt()]
         position: usize,
     },
