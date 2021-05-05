@@ -7,7 +7,8 @@ edition = "2018"
 [dependencies]
 structopt = "0.3"
 chrono = "0.4"
-parse_duration = "2.1.1"
+humantime = "2.1.0"
 rusqlite = {version = "0.25.1", features=["chrono"]}
 directories = "3.0.2"
 anyhow = "1.0.40"
+prettytable-rs = "0.8"

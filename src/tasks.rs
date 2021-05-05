@@ -7,6 +7,6 @@ pub struct Task {
     pub started_at: Option<DateTime<Utc>>,
     pub finished_at: Option<DateTime<Utc>>,
     pub day: String,
-    pub position: i32,
-    pub estimated_time: usize, // in seconds
+    pub position: u32,
+    pub estimated_time: u32, // in seconds
 }

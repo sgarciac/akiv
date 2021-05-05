@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use structopt::StructOpt;
-use parse_duration::parse;
+use humantime::parse_duration;
 use std::time::Duration;
 
 #[derive(Debug, StructOpt)]
@@ -12,7 +12,7 @@ pub enum Command {
         description: String,
 
         /// The task estimated duration (parse_duration)
-        #[structopt(parse(try_from_str=parse))]
+        #[structopt(parse(try_from_str=parse_duration))]
         estimated_time: Duration,
     },
     /// Remove an entry from the journal file by position.

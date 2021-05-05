@@ -1,3 +1,5 @@
+#[macro_use] extern crate prettytable;
+
 use structopt::StructOpt;
 use anyhow::anyhow;
 use std::path::PathBuf;
