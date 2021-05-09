@@ -22,6 +22,8 @@ pub enum Command {
     },
     /// List all tasks in the journal file.
     List,
+    /// Mark current task as done, and advance to next task
+    Next,
     /// Init the journal file
     Init,
 }

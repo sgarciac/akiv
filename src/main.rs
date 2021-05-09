@@ -44,6 +44,7 @@ fn main() -> anyhow::Result<()> {
             interface::add_task(journal_file, description, estimated_time.as_secs())
         },
         List => interface::list(journal_file),
+        Next => interface::next(journal_file),
         Rm {position} => interface::remove_task(journal_file, position),
     }?;
     Ok(())
