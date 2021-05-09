@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use directories::ProjectDirs;
 
 mod cli;
-mod tasks;
+mod model;
 mod interface;
 
 use cli::{Command::*, CommandLineArgs};
@@ -40,8 +40,8 @@ fn main() -> anyhow::Result<()> {
     // Perform the action.
     match action {
         Init => interface::init_journal(journal_file),
-        Add {description, estimated_time} => {
-            interface::add_task(journal_file, description, estimated_time.as_secs())
+        Add {description, estimated_time, at} => {
+            interface::add_task(journal_file, description, estimated_time.as_secs(), at)
         },
         List => interface::list(journal_file),
         Next => interface::next(journal_file),

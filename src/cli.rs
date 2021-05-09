@@ -5,15 +5,20 @@ use std::time::Duration;
 
 #[derive(Debug, StructOpt)]
 pub enum Command {
-    /// Write a new entry.
+    /// Add a new task to the list.
     Add {
-        /// The task description text.
+        /// Position at which the item should be inserted. By default, the task will be inserted at the end.
+        #[structopt(short, about = "insert task after this.")]
+        at: Option<u32>,
+
+        /// The task's description.
         #[structopt()]
         description: String,
 
-        /// The task estimated duration (parse_duration)
+        /// The task's estimated duration.
         #[structopt(parse(try_from_str=parse_duration))]
-        estimated_time: Duration,
+        estimated_time: Duration
+
     },
     /// Remove a task.
     Rm {
@@ -22,16 +27,16 @@ pub enum Command {
     },
     /// List all tasks in the journal file.
     List,
-    /// Mark current task as done, and advance to next task
+    /// Mark current task as done, and advance to next task.
     Next,
-    /// Init the journal file
+    /// Init the journal file.
     Init,
 }
 
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "Akiv",
-    about = "A hyper-minimalistic daily planner."
+    about = "The ultra minimalistic daily planner."
 )]
 pub struct CommandLineArgs {
     #[structopt(subcommand)]
