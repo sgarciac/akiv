@@ -19,6 +19,7 @@ pub trait TaskLabels {
     fn fmt_description(&self) -> String;
     fn fmt_estimated_time(&self) -> String;
     fn fmt_finished_at(&self) -> String;
+    fn fmt_started_at(&self) -> String;
 }
 
 impl TaskLabels for Task {
@@ -40,6 +41,14 @@ impl TaskLabels for Task {
             finished_at_string = finished_at.format("%T").to_string();
         }
         return finished_at_string;
+    }
+
+    fn fmt_started_at(&self) -> String {
+        let mut started_at_string : String = "".to_string();
+        if let Some(started_at) = self.started_at {
+            started_at_string = started_at.format("%T").to_string();
+        }
+        return started_at_string;
     }
 }
 

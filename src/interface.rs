@@ -62,9 +62,10 @@ pub fn add_task(journal_path: PathBuf, description: String, estimated_time: u64,
     return Ok(())
 }
 
+// Set the current running task finished_at field, and the next task started_at.
 pub fn next(journal_path: PathBuf) -> Result<()>{
     let conn = Connection::open(&journal_path)?;
-    let state = current_work_state(&conn)?;
+    let mut state = current_work_state(&conn)?;
 
     if matches!(state,model::WorkState::NoPendingTasks ) {
         println!("There are no pending tasks! use 'akiv add' to add new tasks to your list.");
@@ -76,8 +77,11 @@ pub fn next(journal_path: PathBuf) -> Result<()>{
         return Ok(());
     }
 
-    let current_task = current_task(&conn)?;
-    conn.execute("UPDATE task set finished_at = CURRENT_TIMESTAMP where id = ?1", params![current_task.id])?;
+    //
+    let currently_running_task = active_task(&conn).unwrap();
+    conn.execute("UPDATE task set finished_at = CURRENT_TIMESTAMP where id = ?1", params![currently_running_task.id])?;
+    conn.execute("UPDATE task set started_at = CURRENT_TIMESTAMP where position = ?1", params![currently_running_task.position + 1])?;
+
     return Ok(());
 }
 
@@ -94,9 +98,14 @@ pub fn remove_task(journal_path: PathBuf, position: usize) -> Result<()> {
 pub fn start(journal_path: PathBuf) -> Result<()> {
     let conn = Connection::open(&journal_path)?;
     match current_work_state(&conn)? {
-        model::WorkState::Running => println!("Already running."),
-        model::WorkState::Stopped => {println!("Running!"); switchWorkState(&conn)?;},
-        model::WorkState::NoPendingTasks => println!("No pending tasks!")
+        model::WorkState::Running => {println!("Already running."); return Ok(());},
+        model::WorkState::Stopped => {println!("Running!"); switch_work_state(&conn)?;},
+        model::WorkState::NoPendingTasks => {println!("No pending tasks!"); return Ok(())}
+    }
+    // if no task has started yet, start the first task.
+    let currently_running_task = active_task(&conn);
+    if currently_running_task.is_none() {
+        conn.execute("UPDATE task set started_at = CURRENT_TIMESTAMP where position = 1", [])?;
     }
     return Ok(())
 }
@@ -105,13 +114,13 @@ pub fn stop(journal_path: PathBuf) -> Result<()> {
     let conn = Connection::open(&journal_path)?;
     match current_work_state(&conn)? {
         model::WorkState::Stopped => println!("Not running."),
-        model::WorkState::Running => {println!("Stopped."); switchWorkState(&conn)?;},
+        model::WorkState::Running => {println!("Stopped."); switch_work_state(&conn)?;},
         model::WorkState::NoPendingTasks => println!("No pending tasks!")
     }
     return Ok(())
 }
 
-fn switchWorkState(db: &Connection) -> Result<()> {
+fn switch_work_state(db: &Connection) -> Result<()> {
     db.execute("INSERT INTO work (day, timestamp) VALUES(DATE('now', 'localtime'), CURRENT_TIMESTAMP)",
                [])?;
     return Ok(());
@@ -132,18 +141,30 @@ pub fn list(journal_path: PathBuf) -> Result<()> {
     let mut cumulated_todo_duration = 0i64;
     let local_time: DateTime<Local> = Local::now();
 
-    table.add_row(row!["id", "task", "expected duration", "diff.", "expected end time", "end time"]);
+    table.add_row(row!["id", "task", "started at", "expected duration", "diff.", "expected end time", "end time"]);
     for task in task_iter {
         let task = task.unwrap();
         if task.finished_at == None {
             cumulated_todo_duration += i64::from(task.estimated_time);
         }
 
+        let estimated_end_time = if task.finished_at == None {
+            if task.started_at == None {
+                (local_time + Duration::seconds(i64::from(cumulated_todo_duration))).format("%T").to_string()
+            } else {
+                (task.started_at.unwrap() + Duration::seconds(i64::from(task.estimated_time))).format("%T").to_string()
+            }
+
+        } else {
+            "".to_string()
+        };
+
         table.add_row(row![task.fmt_position(),
                            task.fmt_description(),
+                           task.fmt_started_at(),
                            task.fmt_estimated_time(),
                            "",
-                           (local_time + Duration::seconds(i64::from(cumulated_todo_duration))).format("%T").to_string(),
+                           estimated_end_time,
                            task.fmt_finished_at()
         ]);
     }
@@ -181,9 +202,9 @@ fn task_from_row(row: &Row) -> Result<model::Task> {
     })
 }
 
-fn current_task(db: &Connection) -> Result<model::Task> {
-    let task = db.query_row("SELECT id, day, description, position, created_at, started_at, finished_at, estimated_time FROM task WHERE day = DATE('now','localtime') AND started_at IS NULL ORDER BY position LIMIT 1", [], |row| task_from_row(row))?;
-    return Ok(task);
+fn active_task(db: &Connection) -> Option<model::Task> {
+    let task = db.query_row("SELECT id, day, description, position, created_at, started_at, finished_at, estimated_time FROM task WHERE day = DATE('now','localtime') AND started_at IS NOT NULL AND finished_at IS NULL ORDER BY position LIMIT 1", [], |row| task_from_row(row));
+    return task.ok();
 }
 
 fn pending_tasks_count(db: &Connection) -> Result<usize> {
@@ -191,10 +212,9 @@ fn pending_tasks_count(db: &Connection) -> Result<usize> {
     return Ok(count);
 }
 
-
-fn task_at(db: &Connection, position: u32) -> Result<model::Task> {
-    let task = db.query_row("SELECT id, day, description, position, created_at, started_at, finished_at, estimated_time FROM task WHERE day = DATE('now','localtime') AND position = ?1", params![position], |row| task_from_row(row))?;
-    return Ok(task);
+fn task_at(db: &Connection, position: u32) -> Option<model::Task> {
+    let task = db.query_row("SELECT id, day, description, position, created_at, started_at, finished_at, estimated_time FROM task WHERE day = DATE('now','localtime') AND position = ?1", params![position], |row| task_from_row(row));
+    return task.ok();
 }
 
 fn current_work_state(db: &Connection) -> Result<model::WorkState> {
