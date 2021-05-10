@@ -29,6 +29,10 @@ pub enum Command {
     List,
     /// Mark current task as done, and advance to next task.
     Next,
+    /// Start working
+    Start,
+    /// Stop working
+    Stop,
     /// Init the journal file.
     Init,
 }
