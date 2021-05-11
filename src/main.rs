@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use std::path::PathBuf;
 use directories::ProjectDirs;
 
+
 mod cli;
 mod model;
 mod interface;
@@ -44,6 +45,7 @@ fn main() -> anyhow::Result<()> {
             interface::add_task(journal_file, description, estimated_time.as_secs(), at)
         },
         List => interface::list(journal_file),
+        Pauses => interface::pauses(journal_file),
         Start => interface::start(journal_file),
         Stop => interface::stop(journal_file),
         Next => interface::next(journal_file),

@@ -73,7 +73,7 @@ pub fn next(journal_path: PathBuf) -> Result<()>{
     }
 
     if matches!(state,model::WorkState::Stopped ) {
-        println!("Work is stopped. Use 'akiv start' before completing current task.");
+        println!("Work is stopped. Use 'akiv start' before moving to next task.");
         return Ok(());
     }
 
@@ -126,11 +126,30 @@ fn switch_work_state(db: &Connection) -> Result<()> {
     return Ok(());
 }
 
+pub fn pauses(journal_path: PathBuf) -> Result<()> {
+    let mut table = Table::new();
+
+    table.add_row(row!["start", "end", "duration"]);
+
+    let conn = Connection::open(&journal_path)?;
+    let stopped_ranges = stopped_ranges(&conn)?;
+    for range in stopped_ranges {
+        match range.1 {
+            Some(end) => { table.add_row(row![range.0.format("%T"), end.format("%T"), format_duration((end - range.0).to_std().unwrap())]) },
+            None => { table.add_row(row![range.0.format("%T"), "-", format_duration((Local::now() - range.0).to_std().unwrap())]) }
+        };
+    }
+
+    table.printstd();
+    return Ok(());
+}
+
 pub fn list(journal_path: PathBuf) -> Result<()> {
     let mut table = Table::new();
 
     let conn = Connection::open(&journal_path)?;
 
+    let pauses = stopped_ranges(&conn)?;
 
     // NOT STARTED
     let mut stmt = conn.prepare("SELECT id, day, description, position, created_at, started_at, finished_at, estimated_time FROM task WHERE day = DATE('now','localtime') ORDER BY position")?;
@@ -138,35 +157,39 @@ pub fn list(journal_path: PathBuf) -> Result<()> {
         return task_from_row(row);
     })?;
 
-    let mut cumulated_todo_duration = 0i64;
-    let local_time: DateTime<Local> = Local::now();
+    let mut unfinished_tasks_estimated_time = 0i64;
 
-    table.add_row(row!["id", "task", "started at", "expected duration", "diff.", "expected end time", "end time"]);
+    table.add_row(row!["id", "task", "started at", "expected duration", "ellapsed", "expected end time", "end time", "Time in pause"]);
     for task in task_iter {
         let task = task.unwrap();
-        if task.finished_at == None {
-            cumulated_todo_duration += i64::from(task.estimated_time);
-        }
 
-        let estimated_end_time = if task.finished_at == None {
-            if task.started_at == None {
-                (local_time + Duration::seconds(i64::from(cumulated_todo_duration))).format("%T").to_string()
-            } else {
-                (task.started_at.unwrap() + Duration::seconds(i64::from(task.estimated_time))).format("%T").to_string()
-            }
+        // let ellapsed = if task.started_at == Some {
+        //     if task.finished_at == None {
 
-        } else {
-            "".to_string()
-        };
+        //         (local_time + Duration::seconds(i64::from(cumulated_todo_duration))).format("%T").to_string()
+        //     } else {
+        //         (task.started_at.unwrap() + Duration::seconds(i64::from(task.estimated_time))).format("%T").to_string()
+        //     }
+
+        // } else {
+        //     "".to_string()
+        //}
 
         table.add_row(row![task.fmt_position(),
                            task.fmt_description(),
                            task.fmt_started_at(),
                            task.fmt_estimated_time(),
                            "",
-                           estimated_end_time,
-                           task.fmt_finished_at()
+                           task.fmt_estimated_end_time(unfinished_tasks_estimated_time),
+                           task.fmt_finished_at(),
+                           format_duration((paused_time(&task, &pauses)?).to_std().unwrap())
         ]);
+
+        // TODO: For running task, dont count already worked time
+        if task.finished_at == None {
+            unfinished_tasks_estimated_time += i64::from(task.estimated_time);
+        }
+
     }
 
     table.printstd();
@@ -175,14 +198,6 @@ pub fn list(journal_path: PathBuf) -> Result<()> {
         model::WorkState::NoPendingTasks => println!("No pending tasks."),
         model::WorkState::Running => println!("Current state: Running."),
         model::WorkState::Stopped => println!("Current state: Stopped."),
-    }
-
-    let stopped_ranges = stopped_ranges(&conn)?;
-    for range in stopped_ranges {
-        match range.1 {
-            Some(end) => println!("{} - {}",range.0, end),
-            None => println!("{} - {}",range.0, "-")
-        }
     }
 
     Ok(())
@@ -229,6 +244,21 @@ fn current_work_state(db: &Connection) -> Result<model::WorkState> {
     } else {
         return Ok(model::WorkState::Stopped);
     }
+}
+
+// Returns the duration a task has been in pause.
+fn paused_time(task: &model::Task, pauses: &Vec<(DateTime<Local>,Option<DateTime<Local>>)>) -> Result<Duration> {
+    if task.started_at == None {
+        return Ok(Duration::seconds(0));
+    }
+
+    let pauses_iter = pauses.iter();
+    let mut paused_time = Duration::seconds(0);
+    for pause in pauses_iter {
+        paused_time = paused_time + overlap((task.started_at.unwrap(), task.finished_at), (pause.0, pause.1), Local::now())
+    }
+
+    return Ok(paused_time);
 }
 
 // Returns a slice of ranges defining the times where work has been stopped.

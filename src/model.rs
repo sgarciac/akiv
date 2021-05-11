@@ -1,4 +1,4 @@
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, Duration};
 use humantime::format_duration;
 use std::time::Duration as STDDuration;
 
@@ -20,6 +20,7 @@ pub trait TaskLabels {
     fn fmt_estimated_time(&self) -> String;
     fn fmt_finished_at(&self) -> String;
     fn fmt_started_at(&self) -> String;
+    fn fmt_estimated_end_time(&self, before: i64) -> String;
 }
 
 impl TaskLabels for Task {
@@ -49,6 +50,20 @@ impl TaskLabels for Task {
             started_at_string = started_at.format("%T").to_string();
         }
         return started_at_string;
+    }
+
+    fn fmt_estimated_end_time(&self, before: i64) -> String {
+        let local_time: DateTime<Local> = Local::now();
+        if self.finished_at == None {
+            if self.started_at == None {
+                (local_time + Duration::seconds(i64::from(before + i64::from(self.estimated_time)))).format("%T").to_string()
+            } else {
+                (self.started_at.unwrap() + Duration::seconds(i64::from(self.estimated_time))).format("%T").to_string()
+            }
+
+        } else {
+            "".to_string()
+        }
     }
 }
 
