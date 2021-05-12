@@ -20,7 +20,7 @@ pub trait TaskLabels {
     fn fmt_estimated_time(&self) -> String;
     fn fmt_finished_at(&self) -> String;
     fn fmt_started_at(&self) -> String;
-    fn fmt_estimated_end_time(&self, before: i64) -> String;
+    fn fmt_estimated_end_time(&self, before: i64, paused_time: Duration) -> String;
 }
 
 impl TaskLabels for Task {
@@ -52,13 +52,15 @@ impl TaskLabels for Task {
         return started_at_string;
     }
 
-    fn fmt_estimated_end_time(&self, before: i64) -> String {
+    fn fmt_estimated_end_time(&self, before: i64, paused_time: Duration) -> String {
         let local_time: DateTime<Local> = Local::now();
         if self.finished_at == None {
             if self.started_at == None {
                 (local_time + Duration::seconds(i64::from(before + i64::from(self.estimated_time)))).format("%T").to_string()
             } else {
-                (self.started_at.unwrap() + Duration::seconds(i64::from(self.estimated_time))).format("%T").to_string()
+                let worked_time = (local_time - self.started_at.unwrap()) - paused_time;
+                println!("worked time {}", worked_time.num_seconds());
+                ((local_time + Duration::seconds(std::cmp::max(i64::from(self.estimated_time) - worked_time.num_seconds(),0)))).format("%T").to_string()
             }
 
         } else {

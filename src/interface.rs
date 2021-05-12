@@ -147,6 +147,7 @@ pub fn pauses(journal_path: PathBuf) -> Result<()> {
 pub fn list(journal_path: PathBuf) -> Result<()> {
     let mut table = Table::new();
 
+    let current_time: DateTime<Local> = Local::now();
     let conn = Connection::open(&journal_path)?;
 
     let pauses = stopped_ranges(&conn)?;
@@ -180,14 +181,20 @@ pub fn list(journal_path: PathBuf) -> Result<()> {
                            task.fmt_started_at(),
                            task.fmt_estimated_time(),
                            "",
-                           task.fmt_estimated_end_time(unfinished_tasks_estimated_time),
+                           task.fmt_estimated_end_time(unfinished_tasks_estimated_time, paused_time(&task, &pauses)?),
                            task.fmt_finished_at(),
                            format_duration((paused_time(&task, &pauses)?).to_std().unwrap())
         ]);
 
         // TODO: For running task, dont count already worked time
         if task.finished_at == None {
-            unfinished_tasks_estimated_time += i64::from(task.estimated_time);
+            if task.started_at == None {
+                unfinished_tasks_estimated_time += i64::from(task.estimated_time);
+            } else {
+                let worked_time = (current_time - task.started_at.unwrap()) - (paused_time(&task, &pauses)?);
+                unfinished_tasks_estimated_time += std::cmp::max(i64::from(task.estimated_time) - worked_time.num_seconds(), 0i64);
+                println!("{}", unfinished_tasks_estimated_time)
+            }
         }
 
     }
