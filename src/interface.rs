@@ -47,6 +47,10 @@ pub fn add_task(journal_path: PathBuf, description: String, estimated_time: u64,
         position = tasks_count + 1;
     }
 
+    if position < 1 {
+        position = 1;
+    }
+
     // hack to shift all positions after the insert to the right without breaking the unique constraint.
     conn.execute("UPDATE task set position = - (position + 1) where day = DATE('now', 'localtime') and position >= ?1",
                  params![position])?;
