@@ -2,6 +2,7 @@ use chrono::{DateTime, Local, Duration};
 use humantime::format_duration;
 use std::time::Duration as STDDuration;
 
+/// A single task, saved as an entry in the stasks table.
 #[derive(Debug)]
 pub struct Task {
     pub id: u32,
@@ -14,45 +15,17 @@ pub struct Task {
     pub estimated_duration: Duration, // in seconds
 }
 
-pub trait TaskLabels {
-    fn fmt_position(&self) -> String;
-    fn fmt_description(&self) -> String;
-    fn fmt_estimated_duration(&self) -> String;
-    fn fmt_finished_at(&self) -> String;
-    fn fmt_started_at(&self) -> String;
-    fn fmt_estimated_end_time(&self, before: i64, paused_time: Duration) -> String;
+/// An enumeration to capture the possible states of the work activity.
+/// The user is either working on a task, on pause, or she has no tasks
+/// to work on.
+#[derive(Debug)]
+pub enum WorkState {
+    Running,
+    Stopped,
+    NoPendingTasks
 }
 
-impl TaskLabels for Task {
-    fn fmt_position(&self) -> String {
-        return self.position.to_string();
-    }
-
-    fn fmt_description(&self) -> String {
-        return self.description.to_string();
-    }
-
-    fn fmt_estimated_duration(&self) -> String {
-        return format_duration(self.estimated_duration.to_std().unwrap()).to_string()
-    }
-
-    fn fmt_finished_at(&self) -> String {
-        let mut finished_at_string : String = "".to_string();
-        if let Some(finished_at) = self.finished_at {
-            finished_at_string = finished_at.format("%T").to_string();
-        }
-        return finished_at_string;
-    }
-
-    fn fmt_started_at(&self) -> String {
-        let mut started_at_string : String = "".to_string();
-        if let Some(started_at) = self.started_at {
-            started_at_string = started_at.format("%T").to_string();
-        }
-        return started_at_string;
-    }
-
-    fn fmt_estimated_end_time(&self, before: i64, paused_time: Duration) -> String {
+//    fn fmt_estimated_end_time(&self, before: i64, paused_time: Duration) -> String {
         //let local_time: DateTime<Local> = Local::now();
         //if self.finished_at == None {
         //    if self.started_at == None {
@@ -66,13 +39,3 @@ impl TaskLabels for Task {
 //        } else {
   //          "".to_string()
         //    }
-        return "to-implement".to_string();
-    }
-}
-
-#[derive(Debug)]
-pub enum WorkState {
-    Running,
-    Stopped,
-    NoPendingTasks
-}
