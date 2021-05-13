@@ -168,26 +168,15 @@ pub fn list(journal_path: PathBuf) -> Result<()> {
     for task in task_iter {
         let task = task.unwrap();
 
-        // let ellapsed = if task.started_at == Some {
-        //     if task.finished_at == None {
-
-        //         (local_time + Duration::seconds(i64::from(cumulated_todo_duration))).format("%T").to_string()
-        //     } else {
-        //         (task.started_at.unwrap() + Duration::seconds(i64::from(task.estimated_time))).format("%T").to_string()
-        //     }
-
-        // } else {
-        //     "".to_string()
-        //}
-
-        table.add_row(row![task.fmt_position(),
-                           task.fmt_description(),
-                           task.fmt_started_at(),
-                           task.fmt_estimated_time(),
+        table.add_row(row![task.position,
+                           task.description,
+                           format_optional_time(task.started_at),
+                           task.estimated_time,
                            "",
                            task.fmt_estimated_end_time(unfinished_tasks_estimated_time, paused_time(&task, &pauses)?),
-                           task.fmt_finished_at(),
-                           format_duration((paused_time(&task, &pauses)?).to_std().unwrap())
+                           format_optional_time(task.finished_at),
+                           format_chronos_duration(paused_time(&task, &pauses)?)
+
         ]);
 
         // TODO: For running task, dont count already worked time
@@ -331,4 +320,15 @@ fn overlap(range1: (DateTime<Local>, Option<DateTime<Local>>),range2: (DateTime<
     }
     // no overlap
     return Duration::seconds(0);
+}
+
+fn format_optional_time(optional_timestamp:Option<DateTime<Local>>) -> String {
+    match optional_timestamp {
+        Some(timestamp) => timestamp.format("%T").to_string(),
+        None => "".to_string()
+    }
+}
+
+fn format_chronos_duration(duration: Duration) -> String {
+    format_duration(duration.to_std().unwrap()).to_string()
 }
