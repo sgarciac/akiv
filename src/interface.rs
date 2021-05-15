@@ -16,13 +16,11 @@ use anyhow::anyhow;
 use anyhow::Result;
 
 pub fn add_task(
-    journal_path: PathBuf,
+    db: Connection,
     description: String,
     estimated_duration: u64,
     at: Option<u32>,
 ) -> Result<()> {
-
-    let db = get_journal_db(journal_path)?;
 
     let tasks_count = tasks_count(&db)?;
 
@@ -57,8 +55,7 @@ pub fn add_task(
 }
 
 // Set the current running task finished_at field, and the next task started_at.
-pub fn next(journal_path: PathBuf) -> Result<()> {
-    let db = Connection::open(&journal_path)?;
+pub fn next(db: Connection) -> Result<()> {
     let mut state = current_work_state(&db)?;
 
     if matches!(state, WorkState::NoPendingTasks) {
@@ -85,8 +82,7 @@ pub fn next(journal_path: PathBuf) -> Result<()> {
     return Ok(());
 }
 
-pub fn remove_task(journal_path: PathBuf, position: usize) -> Result<()> {
-    let db = Connection::open(&journal_path)?;
+pub fn remove_task(db: Connection, position: usize) -> Result<()> {
     db.execute(
         "DELETE FROM task where day = DATE('now', 'localtime') and position = ?1",
         params![position],
@@ -98,8 +94,7 @@ pub fn remove_task(journal_path: PathBuf, position: usize) -> Result<()> {
     Ok(())
 }
 
-pub fn start(journal_path: PathBuf) -> Result<()> {
-    let db = Connection::open(&journal_path)?;
+pub fn start(db: Connection) -> Result<()> {
     match current_work_state(&db)? {
         WorkState::Running => {
             println!("Already running.");
@@ -125,8 +120,7 @@ pub fn start(journal_path: PathBuf) -> Result<()> {
     return Ok(());
 }
 
-pub fn stop(journal_path: PathBuf) -> Result<()> {
-    let db = Connection::open(&journal_path)?;
+pub fn stop(db: Connection) -> Result<()> {
     match current_work_state(&db)? {
         WorkState::Stopped => println!("Not running."),
         WorkState::Running => {
@@ -146,12 +140,11 @@ fn switch_work_state(db: &Connection) -> Result<()> {
     return Ok(());
 }
 
-pub fn pauses(journal_path: PathBuf) -> Result<()> {
+pub fn pauses(db: Connection) -> Result<()> {
     let mut table = Table::new();
 
     table.add_row(row!["start", "end", "duration"]);
 
-    let db = Connection::open(&journal_path)?;
     let stopped_ranges = stopped_ranges(&db)?;
     for range in stopped_ranges {
         match range.1 {
@@ -172,8 +165,7 @@ pub fn pauses(journal_path: PathBuf) -> Result<()> {
     return Ok(());
 }
 
-pub fn list(journal_path: PathBuf) -> Result<()> {
-    let db = Connection::open(&journal_path)?;
+pub fn list(db: Connection) -> Result<()> {
     let mut table = Table::new();
 
     let current_time: DateTime<Local> = Local::now();
@@ -401,15 +393,4 @@ fn format_optional_time(optional_timestamp: Option<DateTime<Local>>) -> String {
 
 fn format_chrono_duration(duration: Duration) -> String {
     format_duration(duration.to_std().unwrap()).to_string()
-}
-
-/// Get a connection to the journal database, creating it if it does
-/// not exist.
-pub fn get_journal_db(journal_path: PathBuf) -> Result<Connection> {
-    let journal_exists = journal_path.exists();
-    let db = Connection::open(&journal_path)?;
-    if !journal_exists {
-        init_journal(&db)?;
-    }
-    Ok(db)
 }

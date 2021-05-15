@@ -8,6 +8,8 @@ use directories::ProjectDirs;
 mod cli;
 mod model;
 mod interface;
+use rusqlite::{Connection};
+use crate::model::{init_journal};
 
 use cli::{Command::*, CommandLineArgs};
 
@@ -25,6 +27,18 @@ fn find_default_journal_file() -> Option<PathBuf> {
     }
 }
 
+/// Get a connection to the journal database, creating it if it does
+/// not exist.
+pub fn get_journal_db(journal_path: PathBuf) -> anyhow::Result<Connection> {
+    let journal_exists = journal_path.exists();
+    let db = Connection::open(&journal_path)?;
+    if !journal_exists {
+        init_journal(&db)?;
+    }
+    Ok(db)
+}
+
+
 fn main() -> anyhow::Result<()> {
     // Get the command-line arguments.
     let CommandLineArgs {
@@ -37,17 +51,19 @@ fn main() -> anyhow::Result<()> {
         .or_else(find_default_journal_file)
         .ok_or(anyhow!("Failed to find journal file."))?;
 
+    let database = get_journal_db(journal_file)?;
+
     // Perform the action.
     match action {
         Add {description, estimated_time, at} => {
-            interface::add_task(journal_file, description, estimated_time.as_secs(), at)
+            interface::add_task(database, description, estimated_time.as_secs(), at)
         },
-        List => interface::list(journal_file),
-        Pauses => interface::pauses(journal_file),
-        Start => interface::start(journal_file),
-        Stop => interface::stop(journal_file),
-        Next => interface::next(journal_file),
-        Rm {position} => interface::remove_task(journal_file, position),
+        List => interface::list(database),
+        Pauses => interface::pauses(database),
+        Start => interface::start(database),
+        Stop => interface::stop(database),
+        Next => interface::next(database),
+        Rm {position} => interface::remove_task(database, position),
     }?;
     Ok(())
 }
