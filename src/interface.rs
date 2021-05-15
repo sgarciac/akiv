@@ -1,41 +1,19 @@
+// Implementations of the commands. Responsible of
+// - input validation.
+// - opening connection to the database.
+// - printint the output.
+//
+// All interactions with the data should be done via models.
+
 use crate::model::*;
 use chrono::{DateTime, Duration, Local};
 use humantime::format_duration;
 use prettytable::Table;
-use rusqlite::{params, Connection, Result, Row};
+use rusqlite::{params, Connection, Row, OptionalExtension};
 use std::path::PathBuf;
 use std::time::Duration as STDDuration;
-
-pub fn init_journal(journal_path: PathBuf) -> Result<()> {
-    let conn = Connection::open(&journal_path)?;
-    conn.execute(
-        "CREATE TABLE if not exists task (
-                  id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                  day             TEXT NOT NULL,
-                  description     TEXT NOT NULL,
-                  position        INTEGER NOT NULL,
-                  created_at      TEXT NOT NULL,
-                  started_at      TEXT,
-                  finished_at     TEXT,
-                  estimated_duration  INTEGER NOT NULL
-                  )",
-        [],
-    )?;
-    conn.execute(
-        "CREATE UNIQUE INDEX day_position ON task (day, position)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE TABLE if not exists work (
-                  id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                  day             TEXT NOT NULL,
-                  timestamp       TEXT
-                  )",
-        [],
-    )?;
-    conn.execute("CREATE INDEX day_index ON work (day)", [])?;
-    Ok(())
-}
+use anyhow::anyhow;
+use anyhow::Result;
 
 pub fn add_task(
     journal_path: PathBuf,
@@ -43,15 +21,14 @@ pub fn add_task(
     estimated_duration: u64,
     at: Option<u32>,
 ) -> Result<()> {
-    let conn = Connection::open(&journal_path)?;
 
-    let tasks_count = conn.query_row(
-        "SELECT count(*) from task where day = DATE('now', 'localtime')",
-        [],
-        |row| row.get::<_, u32>(0),
-    )?;
+    let db = get_journal_db(journal_path)?;
+
+    let tasks_count = tasks_count(&db)?;
+
     let mut position = at.unwrap_or(tasks_count + 1);
 
+    // automatically correct position if its out of bounds.
     if position > tasks_count {
         position = tasks_count + 1;
     }
@@ -61,12 +38,13 @@ pub fn add_task(
     }
 
     // hack to shift all positions after the insert to the right without breaking the unique constraint.
-    conn.execute("UPDATE task set position = - (position + 1) where day = DATE('now', 'localtime') and position >= ?1",
+    db.execute("UPDATE task set position = - (position + 1) where day = DATE('now', 'localtime') and position >= ?1",
                  params![position])?;
-    conn.execute("UPDATE task set position = - position where day = DATE('now', 'localtime') and position < 0",[])?;
+    db.execute("UPDATE task set position = - position where day = DATE('now', 'localtime') and position < 0",[])?;
 
-    conn.execute("INSERT INTO task (day, description, position, created_at, estimated_duration) VALUES(DATE('now', 'localtime'), ?1, ?2, CURRENT_TIMESTAMP, ?3)",
+    db.execute("INSERT INTO task (day, description, position, created_at, estimated_duration) VALUES(DATE('now', 'localtime'), ?1, ?2, CURRENT_TIMESTAMP, ?3)",
                  params![description, position, estimated_duration])?;
+
 
     println!(
         "{}. {} ({})",
@@ -80,8 +58,8 @@ pub fn add_task(
 
 // Set the current running task finished_at field, and the next task started_at.
 pub fn next(journal_path: PathBuf) -> Result<()> {
-    let conn = Connection::open(&journal_path)?;
-    let mut state = current_work_state(&conn)?;
+    let db = Connection::open(&journal_path)?;
+    let mut state = current_work_state(&db)?;
 
     if matches!(state, WorkState::NoPendingTasks) {
         println!("There are no pending tasks! use 'akiv add' to add new tasks to your list.");
@@ -94,12 +72,12 @@ pub fn next(journal_path: PathBuf) -> Result<()> {
     }
 
     //
-    let currently_running_task = active_task(&conn).unwrap();
-    conn.execute(
+    let currently_running_task = active_task(&db)?.unwrap();
+    db.execute(
         "UPDATE task set finished_at = CURRENT_TIMESTAMP where id = ?1",
         params![currently_running_task.id],
     )?;
-    conn.execute(
+    db.execute(
         "UPDATE task set started_at = CURRENT_TIMESTAMP where position = ?1",
         params![currently_running_task.position + 1],
     )?;
@@ -108,28 +86,28 @@ pub fn next(journal_path: PathBuf) -> Result<()> {
 }
 
 pub fn remove_task(journal_path: PathBuf, position: usize) -> Result<()> {
-    let conn = Connection::open(&journal_path)?;
-    conn.execute(
+    let db = Connection::open(&journal_path)?;
+    db.execute(
         "DELETE FROM task where day = DATE('now', 'localtime') and position = ?1",
         params![position],
     )?;
 
     // hack to shift all positions after the remove to the left without breaking the unique constraint.
-    conn.execute("UPDATE task set position = - (position - 1) where day = DATE('now', 'localtime') and position > ?1", params![position])?;
-    conn.execute("UPDATE task set position = - position  where day = DATE('now', 'localtime') and position < 0", [])?;
+    db.execute("UPDATE task set position = - (position - 1) where day = DATE('now', 'localtime') and position > ?1", params![position])?;
+    db.execute("UPDATE task set position = - position  where day = DATE('now', 'localtime') and position < 0", [])?;
     Ok(())
 }
 
 pub fn start(journal_path: PathBuf) -> Result<()> {
-    let conn = Connection::open(&journal_path)?;
-    match current_work_state(&conn)? {
+    let db = Connection::open(&journal_path)?;
+    match current_work_state(&db)? {
         WorkState::Running => {
             println!("Already running.");
             return Ok(());
         }
         WorkState::Stopped => {
             println!("Running!");
-            switch_work_state(&conn)?;
+            switch_work_state(&db)?;
         }
         WorkState::NoPendingTasks => {
             println!("No pending tasks!");
@@ -137,9 +115,9 @@ pub fn start(journal_path: PathBuf) -> Result<()> {
         }
     }
     // if no task has started yet, start the first task.
-    let currently_running_task = active_task(&conn);
-    if currently_running_task.is_none() {
-        conn.execute(
+    let currently_running_task = active_task(&db);
+    if currently_running_task?.is_none() {
+        db.execute(
             "UPDATE task set started_at = CURRENT_TIMESTAMP where position = 1",
             [],
         )?;
@@ -148,12 +126,12 @@ pub fn start(journal_path: PathBuf) -> Result<()> {
 }
 
 pub fn stop(journal_path: PathBuf) -> Result<()> {
-    let conn = Connection::open(&journal_path)?;
-    match current_work_state(&conn)? {
+    let db = Connection::open(&journal_path)?;
+    match current_work_state(&db)? {
         WorkState::Stopped => println!("Not running."),
         WorkState::Running => {
             println!("Stopped.");
-            switch_work_state(&conn)?;
+            switch_work_state(&db)?;
         }
         WorkState::NoPendingTasks => println!("No pending tasks!"),
     }
@@ -173,8 +151,8 @@ pub fn pauses(journal_path: PathBuf) -> Result<()> {
 
     table.add_row(row!["start", "end", "duration"]);
 
-    let conn = Connection::open(&journal_path)?;
-    let stopped_ranges = stopped_ranges(&conn)?;
+    let db = Connection::open(&journal_path)?;
+    let stopped_ranges = stopped_ranges(&db)?;
     for range in stopped_ranges {
         match range.1 {
             Some(end) => table.add_row(row![
@@ -195,15 +173,16 @@ pub fn pauses(journal_path: PathBuf) -> Result<()> {
 }
 
 pub fn list(journal_path: PathBuf) -> Result<()> {
+    let db = Connection::open(&journal_path)?;
     let mut table = Table::new();
 
     let current_time: DateTime<Local> = Local::now();
-    let conn = Connection::open(&journal_path)?;
 
-    let pauses = stopped_ranges(&conn)?;
+
+    let pauses = stopped_ranges(&db)?;
 
     // NOT STARTED
-    let mut stmt = conn.prepare("SELECT id, day, description, position, created_at, started_at, finished_at, estimated_duration FROM task WHERE day = DATE('now','localtime') ORDER BY position")?;
+    let mut stmt = db.prepare("SELECT id, day, description, position, created_at, started_at, finished_at, estimated_duration FROM task WHERE day = DATE('now','localtime') ORDER BY position")?;
     let task_iter = stmt.query_map([], |row| {
         return task_from_row(row);
     })?;
@@ -251,7 +230,7 @@ pub fn list(journal_path: PathBuf) -> Result<()> {
 
     table.printstd();
 
-    match current_work_state(&conn)? {
+    match current_work_state(&db)? {
         WorkState::NoPendingTasks => println!("No pending tasks."),
         WorkState::Running => println!("Current state: Running."),
         WorkState::Stopped => println!("Current state: Stopped."),
@@ -261,8 +240,8 @@ pub fn list(journal_path: PathBuf) -> Result<()> {
 }
 
 // get a task from a row in this order: day, description, position, created_at, started_at, finished_at, estimated_duration
-fn task_from_row(row: &Row) -> Result<Task> {
-    return Ok(Task {
+fn task_from_row(row: &Row) -> rusqlite::Result<Task> {
+    let task = Task {
         id: row.get(0)?,
         day: row.get(1)?,
         description: row.get(2)?,
@@ -271,12 +250,13 @@ fn task_from_row(row: &Row) -> Result<Task> {
         started_at: row.get::<_, DateTime<Local>>(5).ok(),
         finished_at: row.get::<_, DateTime<Local>>(6).ok(),
         estimated_duration: Duration::seconds(row.get::<_, i64>(7)?),
-    });
+    };
+    return Ok(task);
 }
 
-fn active_task(db: &Connection) -> Option<Task> {
-    let task = db.query_row("SELECT id, day, description, position, created_at, started_at, finished_at, estimated_duration FROM task WHERE day = DATE('now','localtime') AND started_at IS NOT NULL AND finished_at IS NULL ORDER BY position LIMIT 1", [], |row| task_from_row(row));
-    return task.ok();
+fn active_task(db: &Connection) -> Result<Option<Task>> {
+    let task = db.query_row("SELECT id, day, description, position, created_at, started_at, finished_at, estimated_duration FROM task WHERE day = DATE('now','localtime') AND started_at IS NOT NULL AND finished_at IS NULL ORDER BY position LIMIT 1", [], |row| task_from_row(row)).optional()?;
+    return Ok(task);
 }
 
 fn pending_tasks_count(db: &Connection) -> Result<usize> {
@@ -421,4 +401,15 @@ fn format_optional_time(optional_timestamp: Option<DateTime<Local>>) -> String {
 
 fn format_chrono_duration(duration: Duration) -> String {
     format_duration(duration.to_std().unwrap()).to_string()
+}
+
+/// Get a connection to the journal database, creating it if it does
+/// not exist.
+pub fn get_journal_db(journal_path: PathBuf) -> Result<Connection> {
+    let journal_exists = journal_path.exists();
+    let db = Connection::open(&journal_path)?;
+    if !journal_exists {
+        init_journal(&db)?;
+    }
+    Ok(db)
 }

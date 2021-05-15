@@ -35,8 +35,6 @@ pub enum Command {
     Start,
     /// Stop working
     Stop,
-    /// Init the journal file.
-    Init,
 }
 
 #[derive(Debug, StructOpt)]

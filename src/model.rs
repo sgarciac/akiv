@@ -1,6 +1,7 @@
 use chrono::{DateTime, Local, Duration};
-use humantime::format_duration;
-use std::time::Duration as STDDuration;
+use rusqlite::{params, Connection, Row};
+use anyhow::anyhow;
+use anyhow::Result;
 
 /// A single task, saved as an entry in the stasks table.
 #[derive(Debug)]
@@ -23,6 +24,50 @@ pub enum WorkState {
     Running,
     Stopped,
     NoPendingTasks
+}
+
+/// Initialize the journal database.
+pub fn init_journal(db: &Connection) -> Result<()> {
+    db.execute(
+        "CREATE TABLE if not exists task (
+                  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                  day             TEXT NOT NULL,
+                  description     TEXT NOT NULL,
+                  position        INTEGER NOT NULL,
+                  created_at      TEXT NOT NULL,
+                  started_at      TEXT,
+                  finished_at     TEXT,
+                  estimated_duration  INTEGER NOT NULL
+                  )",
+        [],
+    )?;
+
+    db.execute(
+        "CREATE UNIQUE INDEX day_position ON task (day, position)",
+        [],
+    )?;
+
+    db.execute(
+        "CREATE TABLE if not exists work (
+                  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                  day             TEXT NOT NULL,
+                  timestamp       TEXT
+                  )",
+        [],
+    )?;
+
+    db.execute("CREATE INDEX day_index ON work (day)", [])?;
+
+    Ok(())
+}
+
+pub fn tasks_count(db: &Connection) -> Result<u32> {
+    let count = db.query_row(
+        "SELECT count(*) from task where day = DATE('now', 'localtime')",
+        [],
+        |row| row.get::<_, u32>(0),
+    )?;
+    Ok(count)
 }
 
 //    fn fmt_estimated_end_time(&self, before: i64, paused_time: Duration) -> String {
