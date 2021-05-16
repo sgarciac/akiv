@@ -1,21 +1,21 @@
-#[macro_use] extern crate prettytable;
+#[macro_use]
+extern crate prettytable;
 
-use structopt::StructOpt;
 use anyhow::anyhow;
-use std::path::PathBuf;
 use directories::ProjectDirs;
-use chrono::Duration;
+use std::path::PathBuf;
+use structopt::StructOpt;
 
 mod cli;
-mod model;
 mod interface;
-use rusqlite::{Connection};
-use crate::model::{init_journal};
+mod model;
+use crate::model::init_journal;
+use rusqlite::Connection;
 
 use cli::{Command::*, CommandLineArgs};
 
 fn find_default_journal_file() -> Option<PathBuf> {
-    if let Some(base_dirs) = ProjectDirs::from("com","gozque","akiv") {
+    if let Some(base_dirs) = ProjectDirs::from("com", "gozque", "akiv") {
         let root_dir = base_dirs.data_dir();
         if !root_dir.exists() {
             std::fs::create_dir(root_dir).expect("Failed to create directory.");
@@ -39,7 +39,6 @@ pub fn get_journal_db(journal_path: PathBuf) -> anyhow::Result<Connection> {
     Ok(db)
 }
 
-
 fn main() -> anyhow::Result<()> {
     // Get the command-line arguments.
     let CommandLineArgs {
@@ -56,15 +55,17 @@ fn main() -> anyhow::Result<()> {
 
     // Perform the action.
     match action {
-        Add {description, estimated_time, at} => {
-            interface::add_task(database, description, estimated_time, at)
-        },
+        Add {
+            description,
+            estimated_time,
+            at,
+        } => interface::add_task(database, description, estimated_time, at),
         List => interface::list(database),
         Pauses => interface::pauses(database),
         Start => interface::start(database),
         Stop => interface::stop(database),
         Next => interface::next(database),
-        Rm {position} => interface::remove_task(database, position),
+        Rm { position } => interface::remove_task(database, position),
     }?;
     Ok(())
 }
