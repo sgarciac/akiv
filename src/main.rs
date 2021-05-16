@@ -4,6 +4,7 @@ use structopt::StructOpt;
 use anyhow::anyhow;
 use std::path::PathBuf;
 use directories::ProjectDirs;
+use chrono::Duration;
 
 mod cli;
 mod model;
@@ -56,7 +57,7 @@ fn main() -> anyhow::Result<()> {
     // Perform the action.
     match action {
         Add {description, estimated_time, at} => {
-            interface::add_task(database, description, estimated_time.as_secs(), at)
+            interface::add_task(database, description, estimated_time, at)
         },
         List => interface::list(database),
         Pauses => interface::pauses(database),

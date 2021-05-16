@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use structopt::StructOpt;
 use humantime::parse_duration;
-use std::time::Duration;
+use chrono::Duration;
 
 #[derive(Debug, StructOpt)]
 pub enum Command {
@@ -16,14 +16,14 @@ pub enum Command {
         description: String,
 
         /// The task's estimated duration.
-        #[structopt(parse(try_from_str=parse_duration))]
+        #[structopt(parse(try_from_str=parse_chrono_duration))]
         estimated_time: Duration
 
     },
     /// Remove a task.
     Rm {
         #[structopt()]
-        position: usize,
+        position: u32,
     },
     /// List all tasks in the journal file.
     List,
@@ -49,4 +49,9 @@ pub struct CommandLineArgs {
     /// Use a different journal file.
     #[structopt(parse(from_os_str), short, long)]
     pub journal_file: Option<PathBuf>,
+}
+
+fn parse_chrono_duration(s: &str) -> anyhow::Result<Duration> {
+    let duration = parse_duration(s)?;
+    Ok(Duration::from_std(duration)?)
 }

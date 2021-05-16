@@ -1,29 +1,29 @@
 // Implementations of the commands. Responsible of
-// - input validation.
-// - opening connection to the database.
-// - printint the output.
+// - validating input..
+// - printing the output.
 //
 // All interactions with the data should be done via models.
 
-use crate::model::*;
+use crate::model;
+use crate::model::{ WorkState, Task };
 use chrono::{DateTime, Duration, Local};
 use humantime::format_duration;
 use prettytable::Table;
 use rusqlite::{params, Connection, Row, OptionalExtension};
-use std::path::PathBuf;
-use std::time::Duration as STDDuration;
-use anyhow::anyhow;
-use anyhow::Result;
+use anyhow::{Context, Result};
+use anyhow::bail;
 
+///
+/// Adds a task to the current day.
+///
 pub fn add_task(
     db: Connection,
     description: String,
-    estimated_duration: u64,
+    estimated_duration: Duration,
     at: Option<u32>,
 ) -> Result<()> {
 
-    let tasks_count = tasks_count(&db)?;
-
+    let tasks_count = model::tasks_count(&db)?;
     let mut position = at.unwrap_or(tasks_count + 1);
 
     // automatically correct position if its out of bounds.
@@ -35,111 +35,98 @@ pub fn add_task(
         position = 1;
     }
 
-    // hack to shift all positions after the insert to the right without breaking the unique constraint.
-    db.execute("UPDATE task set position = - (position + 1) where day = DATE('now', 'localtime') and position >= ?1",
-                 params![position])?;
-    db.execute("UPDATE task set position = - position where day = DATE('now', 'localtime') and position < 0",[])?;
-
-    db.execute("INSERT INTO task (day, description, position, created_at, estimated_duration) VALUES(DATE('now', 'localtime'), ?1, ?2, CURRENT_TIMESTAMP, ?3)",
-                 params![description, position, estimated_duration])?;
-
+    model::add_task(&db, position, &description, estimated_duration)?;
 
     println!(
         "{}. {} ({})",
         position,
-        description,
-        format_duration(STDDuration::from_secs(u64::from(estimated_duration)))
+        &description,
+        format_chrono_duration(estimated_duration)
     );
     //list(journal_path);
     return Ok(());
 }
 
-// Set the current running task finished_at field, and the next task started_at.
+///
+/// Finishes the current task and starts the next.
+///
 pub fn next(db: Connection) -> Result<()> {
-    let mut state = current_work_state(&db)?;
+    let state = model::current_work_state(&db)?;
 
     if matches!(state, WorkState::NoPendingTasks) {
-        println!("There are no pending tasks! use 'akiv add' to add new tasks to your list.");
-        return Ok(());
+        bail!("There are no pending tasks! use 'akiv add' to add new tasks to your list.");
     }
 
     if matches!(state, WorkState::Stopped) {
-        println!("Work is stopped. Use 'akiv start' before moving to next task.");
-        return Ok(());
+        bail!("Work is stopped. Use 'akiv start' before moving to next task.");
     }
 
-    //
-    let currently_running_task = active_task(&db)?.unwrap();
-    db.execute(
-        "UPDATE task set finished_at = CURRENT_TIMESTAMP where id = ?1",
-        params![currently_running_task.id],
-    )?;
-    db.execute(
-        "UPDATE task set started_at = CURRENT_TIMESTAMP where position = ?1",
-        params![currently_running_task.position + 1],
-    )?;
+    // At this point there should be an active task.
+    let currently_running_task = model::active_task(&db)?.unwrap();
+
+    model::finish_task(&db, currently_running_task.position)?;
+    model::start_task(&db, currently_running_task.position + 1)?;
 
     return Ok(());
 }
 
-pub fn remove_task(db: Connection, position: usize) -> Result<()> {
-    db.execute(
-        "DELETE FROM task where day = DATE('now', 'localtime') and position = ?1",
-        params![position],
-    )?;
+///
+/// Removes the task at the given position.
+///
+pub fn remove_task(db: Connection, position: u32) -> Result<()> {
+    let tasks_count = model::tasks_count(&db)?;
+    if tasks_count == 0 {
+        bail!("You have no tasks to remove!")
+    };
 
-    // hack to shift all positions after the remove to the left without breaking the unique constraint.
-    db.execute("UPDATE task set position = - (position - 1) where day = DATE('now', 'localtime') and position > ?1", params![position])?;
-    db.execute("UPDATE task set position = - position  where day = DATE('now', 'localtime') and position < 0", [])?;
+    if position < 0 || position > tasks_count {
+        bail!("Unexisting task.")
+    }
+
+    model::remove_task(&db, position)?;
+
     Ok(())
 }
 
+
+///
+/// Set the current work state to running.
+///
 pub fn start(db: Connection) -> Result<()> {
-    match current_work_state(&db)? {
-        WorkState::Running => {
-            println!("Already running.");
-            return Ok(());
-        }
+    match model::current_work_state(&db)? {
+        WorkState::Running => bail!("You are already working!"),
+
         WorkState::Stopped => {
-            println!("Running!");
-            switch_work_state(&db)?;
+            model::switch_work_state(&db)?;
+            println!("Running!")
         }
-        WorkState::NoPendingTasks => {
-            println!("No pending tasks!");
-            return Ok(());
-        }
+        WorkState::NoPendingTasks => bail!("You have no tasks to work on!")
     }
     // if no task has started yet, start the first task.
-    let currently_running_task = active_task(&db);
+    let currently_running_task = model::active_task(&db);
     if currently_running_task?.is_none() {
-        db.execute(
-            "UPDATE task set started_at = CURRENT_TIMESTAMP where position = 1",
-            [],
-        )?;
+        model::start_task(&db, 1)?;
     }
     return Ok(());
 }
 
+///
+/// Set the current work state to stopped.
+///
 pub fn stop(db: Connection) -> Result<()> {
-    match current_work_state(&db)? {
-        WorkState::Stopped => println!("Not running."),
+    match model::current_work_state(&db)? {
+        WorkState::Stopped => bail!("Not running."),
         WorkState::Running => {
-            println!("Stopped.");
-            switch_work_state(&db)?;
+            model::switch_work_state(&db)?;
+            println!("Pause!")
         }
-        WorkState::NoPendingTasks => println!("No pending tasks!"),
+        WorkState::NoPendingTasks => bail!("No pending tasks!"),
     }
     return Ok(());
 }
 
-fn switch_work_state(db: &Connection) -> Result<()> {
-    db.execute(
-        "INSERT INTO work (day, timestamp) VALUES(DATE('now', 'localtime'), CURRENT_TIMESTAMP)",
-        [],
-    )?;
-    return Ok(());
-}
-
+///
+/// Print the list of pauses for the current day.
 pub fn pauses(db: Connection) -> Result<()> {
     let mut table = Table::new();
 
@@ -246,42 +233,13 @@ fn task_from_row(row: &Row) -> rusqlite::Result<Task> {
     return Ok(task);
 }
 
-fn active_task(db: &Connection) -> Result<Option<Task>> {
-    let task = db.query_row("SELECT id, day, description, position, created_at, started_at, finished_at, estimated_duration FROM task WHERE day = DATE('now','localtime') AND started_at IS NOT NULL AND finished_at IS NULL ORDER BY position LIMIT 1", [], |row| task_from_row(row)).optional()?;
-    return Ok(task);
-}
 
-fn pending_tasks_count(db: &Connection) -> Result<usize> {
-    let count = db.query_row(
-        "SELECT count(*) FROM task WHERE day = DATE('now','localtime') AND finished_at IS NULL",
-        [],
-        |row| row.get::<_, usize>(0),
-    )?;
-    return Ok(count);
-}
 
 fn task_at(db: &Connection, position: u32) -> Option<Task> {
     let task = db.query_row("SELECT id, day, description, position, created_at, started_at, finished_at, estimated_duration FROM task WHERE day = DATE('now','localtime') AND position = ?1", params![position], |row| task_from_row(row));
     return task.ok();
 }
 
-fn current_work_state(db: &Connection) -> Result<WorkState> {
-    if pending_tasks_count(db)? == 0 {
-        return Ok(WorkState::NoPendingTasks);
-    }
-
-    let switchs_count = db.query_row(
-        "SELECT count(*) FROM work WHERE day = DATE('now','localtime') ",
-        [],
-        |row| row.get::<_, usize>(0),
-    )?;
-
-    if switchs_count % 2 != 0 {
-        return Ok(WorkState::Running);
-    } else {
-        return Ok(WorkState::Stopped);
-    }
-}
 
 // Returns the duration a task has been in pause.
 fn paused_time(
