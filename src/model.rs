@@ -296,11 +296,28 @@ pub fn paused_time(
             + overlap(
                 (task.started_at.unwrap(), task.finished_at),
                 (pause.0, pause.1),
-                Local::now().duration_round(Duration::seconds(1))?,
+                clt_secs()?,
             )
     }
 
     return Ok(paused_time);
+}
+
+/// Calculate the total time the used has worked on a task (that is without the pauses)
+/// with seconds precision.
+pub fn ellapsed_time(
+    task: &Task,
+    pauses: &Vec<(DateTime<Local>, Option<DateTime<Local>>)>,
+) -> Result<Duration> {
+    match task.state() {
+        TaskState::Pending => Ok(Duration::seconds(0)),
+        TaskState::Active => {
+            Ok((clt_secs()? - task.started_at.unwrap()) - paused_time(&task, pauses)?)
+        }
+        TaskState::Done => Ok(
+            (task.finished_at.unwrap() - task.started_at.unwrap()) - paused_time(&task, pauses)?
+        ),
+    }
 }
 
 /// Returns the duration of the overlap between two ranges. Ranges can have an
@@ -380,6 +397,12 @@ pub fn estimated_end_time(
     } else {
         Ok(None)
     }
+}
+
+/// Return the current local, with seconds precision
+fn clt_secs() -> Result<DateTime<Local>> {
+    let clt = Local::now().duration_round(Duration::seconds(1))?;
+    Ok(clt)
 }
 
 /// Traits

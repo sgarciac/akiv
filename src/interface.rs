@@ -8,13 +8,13 @@ use crate::model;
 use crate::model::TaskExtra;
 use crate::model::TaskState;
 use crate::model::WorkState;
-use textwrap::fill;
 use anyhow::bail;
 use anyhow::Result;
 use chrono::{DateTime, Duration, Local};
 use humantime::format_duration;
 use prettytable::{Row, Table};
 use rusqlite::Connection;
+use textwrap::fill;
 
 /// Adds a task to the current day.
 ///
@@ -220,7 +220,9 @@ pub fn list(db: Connection) -> Result<()> {
             },
             cell!(format_optional_time(task.started_at, "".to_string())),
             cell!(format_chrono_duration(task.estimated_duration)),
-            cell!(""),
+            cell!(format_chrono_duration(model::ellapsed_time(
+                &task, &pauses
+            )?)),
             cell!(format_optional_time(
                 model::estimated_end_time(&task, unfinished_tasks_estimated_duration, &pauses)?,
                 "DONE".to_string()
