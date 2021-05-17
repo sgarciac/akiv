@@ -32,6 +32,21 @@ pub enum TaskState {
     Pending,
 }
 
+/// Get an iterator to the daily tasks
+pub fn tasks(db: &Connection) -> Result<Vec<Task>> {
+    let mut stmt = db.prepare("SELECT id, day, description, position, created_at, started_at, finished_at, estimated_duration FROM task WHERE day = DATE('now','localtime') ORDER BY position")?;
+    let mapped_rows = stmt.query_map([], |row| {
+        return task_from_row(row);
+    })?;
+
+    let mut tasks = Vec::new();
+    for task in mapped_rows {
+        tasks.push(task?);
+    }
+
+    Ok(tasks)
+}
+
 /// Initialize the journal database.
 pub fn init_journal(db: &Connection) -> Result<()> {
     db.execute(
@@ -368,7 +383,6 @@ pub fn estimated_end_time(
 }
 
 /// Traits
-
 pub trait TaskExtra {
     fn is_active(&self) -> bool;
     fn is_done(&self) -> bool;

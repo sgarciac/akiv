@@ -6,15 +6,14 @@
 
 use crate::model;
 use crate::model::TaskExtra;
-use crate::model::WorkState;
 use crate::model::TaskState;
+use crate::model::WorkState;
 use anyhow::bail;
 use anyhow::Result;
 use chrono::{DateTime, Duration, Local};
 use humantime::format_duration;
 use prettytable::{Row, Table};
 use rusqlite::Connection;
-
 
 /// Adds a task to the current day.
 ///
@@ -189,10 +188,13 @@ pub fn list(db: Connection) -> Result<()> {
     let pauses = model::stopped_ranges(&db)?;
 
     // NOT STARTED
-    let mut stmt = db.prepare("SELECT id, day, description, position, created_at, started_at, finished_at, estimated_duration FROM task WHERE day = DATE('now','localtime') ORDER BY position")?;
-    let task_iter = stmt.query_map([], |row| {
-        return model::task_from_row(row);
-    })?;
+    //let mut stmt = db.prepare("SELECT id, day, description, position, created_at, started_at, finished_at, estimated_duration FROM task WHERE day = DATE('now','localtime') ORDER BY position")?;
+
+    //let task_iter = stmt.query_map([], |row| {
+    //    return model::task_from_row(row);
+    //})?;
+    let tasks = model::tasks(&db)?;
+    let task_iter = tasks.iter();
 
     let mut unfinished_tasks_estimated_duration = Duration::seconds(0);
 
@@ -206,25 +208,24 @@ pub fn list(db: Connection) -> Result<()> {
         "Time in pause"
     ]);
     for task in task_iter {
-        let task = task.unwrap();
+        let task = task;
 
-        table.add_row(
-            Row::new(vec!
-                     [
-                         cell!(task.position),
-                         match task.state() {
-                             TaskState::Active => cell!(bFy->task.description),
-                             TaskState::Done => cell!(Fg->task.description),
-                             TaskState::Pending => cell!(task.description)
-                         },
-                         cell!(format_optional_time(task.started_at, "".to_string())),
-                         cell!(format_chrono_duration(task.estimated_duration)),
-                         cell!(""),
-                         cell!(format_optional_time(
-                             model::estimated_end_time(&task, unfinished_tasks_estimated_duration, &pauses)?,
-                             "DONE".to_string())),
-                         cell!(format_chrono_duration(model::paused_time(&task, &pauses)?))
-                     ]));
+        table.add_row(Row::new(vec![
+            cell!(task.position),
+            match task.state() {
+                TaskState::Active => cell!(bFy->task.description),
+                TaskState::Done => cell!(Fg->task.description),
+                TaskState::Pending => cell!(task.description),
+            },
+            cell!(format_optional_time(task.started_at, "".to_string())),
+            cell!(format_chrono_duration(task.estimated_duration)),
+            cell!(""),
+            cell!(format_optional_time(
+                model::estimated_end_time(&task, unfinished_tasks_estimated_duration, &pauses)?,
+                "DONE".to_string()
+            )),
+            cell!(format_chrono_duration(model::paused_time(&task, &pauses)?)),
+        ]));
 
         if task.finished_at == None {
             if task.started_at == None {
