@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use chrono::{DateTime, Duration, Local};
+use chrono::{DateTime, Duration, DurationRound, Local};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
 /// A single task, saved as an entry in the stasks table.
@@ -15,14 +15,21 @@ pub struct Task {
     pub estimated_duration: Duration, // in seconds
 }
 
-/// An enumeration to capture the possible states of the work activity.
-/// The user is either working on a task, on pause, or she has no tasks
-/// to work on.
+/// An enumeration to capture the possible states of the work
+/// activity.  The user is either working or not working. The program
+/// is always stopped if there are no pending tasks.
 #[derive(Debug)]
 pub enum WorkState {
     Running,
     Stopped,
-    NoPendingTasks,
+}
+
+/// The state of a task.
+#[derive(Debug)]
+pub enum TaskState {
+    Done,
+    Active,
+    Pending,
 }
 
 /// Initialize the journal database.
@@ -76,8 +83,8 @@ pub fn tasks_count(db: &Connection) -> Result<u32> {
     Ok(count)
 }
 
-/// Return the number of unfinished tasks for the current day.
-pub fn pending_tasks_count(db: &Connection) -> Result<u32> {
+/// Return the number of unfinished tasks for the current day (including the active one).
+pub fn unfinished_tasks_count(db: &Connection) -> Result<u32> {
     let count = db
         .query_row(
             "SELECT count(*) FROM task WHERE day = DATE('now','localtime') AND finished_at IS NULL",
@@ -116,10 +123,6 @@ pub fn add_task(
 /// - in a pause
 /// - has no more tasks left to work on.
 pub fn current_work_state(db: &Connection) -> Result<WorkState> {
-    if pending_tasks_count(db)? == 0 {
-        return Ok(WorkState::NoPendingTasks);
-    }
-
     let switchs_count = db
         .query_row(
             "SELECT count(*) FROM work WHERE day = DATE('now','localtime') ",
@@ -261,6 +264,7 @@ pub fn stopped_ranges(db: &Connection) -> Result<Pauses> {
 //}
 
 /// Calculate the total time a task has been stopped.
+/// with seconds precision.
 pub fn paused_time(
     task: &Task,
     pauses: &Vec<(DateTime<Local>, Option<DateTime<Local>>)>,
@@ -277,7 +281,7 @@ pub fn paused_time(
             + overlap(
                 (task.started_at.unwrap(), task.finished_at),
                 (pause.0, pause.1),
-                Local::now(),
+                Local::now().duration_round(Duration::seconds(1))?,
             )
     }
 
@@ -360,5 +364,35 @@ pub fn estimated_end_time(
         }
     } else {
         Ok(None)
+    }
+}
+
+/// Traits
+
+pub trait TaskExtra {
+    fn is_active(&self) -> bool;
+    fn is_done(&self) -> bool;
+    fn state(&self) -> TaskState;
+}
+
+impl TaskExtra for Task {
+    fn is_active(&self) -> bool {
+        self.started_at.is_some() && self.finished_at.is_none()
+    }
+
+    fn is_done(&self) -> bool {
+        self.finished_at.is_some()
+    }
+
+    fn state(&self) -> TaskState {
+        if self.is_active() {
+            TaskState::Active
+        } else {
+            if self.is_done() {
+                TaskState::Done
+            } else {
+                TaskState::Pending
+            }
+        }
     }
 }
