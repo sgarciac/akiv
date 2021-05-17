@@ -8,6 +8,7 @@ use crate::model;
 use crate::model::TaskExtra;
 use crate::model::TaskState;
 use crate::model::WorkState;
+use textwrap::fill;
 use anyhow::bail;
 use anyhow::Result;
 use chrono::{DateTime, Duration, Local};
@@ -213,7 +214,7 @@ pub fn list(db: Connection) -> Result<()> {
         table.add_row(Row::new(vec![
             cell!(task.position),
             match task.state() {
-                TaskState::Active => cell!(bFy->task.description),
+                TaskState::Active => cell!(bFy->textwrap::fill(&task.description, 38)),
                 TaskState::Done => cell!(Fg->task.description),
                 TaskState::Pending => cell!(task.description),
             },
