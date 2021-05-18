@@ -194,6 +194,7 @@ pub fn list(db: Connection) -> Result<()> {
     //let task_iter = stmt.query_map([], |row| {
     //    return model::task_from_row(row);
     //})?;
+    let work_state = model::current_work_state(&db)?;
     let tasks = model::tasks(&db)?;
     let task_iter = tasks.iter();
 
@@ -209,16 +210,15 @@ pub fn list(db: Connection) -> Result<()> {
         "Time in pause"
     ]);
     for task in task_iter {
-
-        let etime : Duration = model::ellapsed_time(
-                &task, &pauses
-        )?;
-
+        let etime: Duration = model::ellapsed_time(&task, &pauses)?;
 
         table.add_row(Row::new(vec![
             cell!(task.position),
             match task.state() {
-                TaskState::Active => cell!(bFG->textwrap::fill(&task.description, 38)),
+                TaskState::Active => match work_state {
+                    WorkState::Running => cell!(bFG->textwrap::fill(&task.description, 38)),
+                    WorkState::Stopped => cell!(bFM->textwrap::fill(&task.description, 38)),
+                },
                 TaskState::Done => cell!(Fg->textwrap::fill(&task.description, 38)),
                 TaskState::Pending => cell!(textwrap::fill(&task.description, 38)),
             },
@@ -228,8 +228,7 @@ pub fn list(db: Connection) -> Result<()> {
                 cell!(FR->format_chrono_duration(etime))
             } else {
                 cell!(format_chrono_duration(etime))
-            }
-            ,
+            },
             cell!(format_optional_time(
                 model::estimated_end_time(&task, unfinished_tasks_estimated_duration, &pauses)?,
                 "DONE".to_string()
@@ -253,7 +252,7 @@ pub fn list(db: Connection) -> Result<()> {
 
     table.printstd();
 
-    match model::current_work_state(&db)? {
+    match work_state {
         WorkState::Running => println!("Current state: Running."),
         WorkState::Stopped => println!("Current state: Stopped."),
     }
