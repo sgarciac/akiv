@@ -14,7 +14,7 @@ use chrono::{DateTime, Duration, Local};
 use humantime::format_duration;
 use prettytable::{Row, Table};
 use rusqlite::Connection;
-use textwrap::fill;
+use textwrap;
 
 /// Adds a task to the current day.
 ///
@@ -209,6 +209,12 @@ pub fn list(db: Connection) -> Result<()> {
         "Time in pause"
     ]);
     for task in task_iter {
+
+        let etime : Duration = model::ellapsed_time(
+                &task, &pauses
+        )?;
+
+
         table.add_row(Row::new(vec![
             cell!(task.position),
             match task.state() {
@@ -218,9 +224,12 @@ pub fn list(db: Connection) -> Result<()> {
             },
             cell!(format_optional_time(task.started_at, "".to_string())),
             cell!(format_chrono_duration(task.estimated_duration)),
-            cell!(format_chrono_duration(model::ellapsed_time(
-                &task, &pauses
-            )?)),
+            if etime > task.estimated_duration {
+                cell!(FR->format_chrono_duration(etime))
+            } else {
+                cell!(format_chrono_duration(etime))
+            }
+            ,
             cell!(format_optional_time(
                 model::estimated_end_time(&task, unfinished_tasks_estimated_duration, &pauses)?,
                 "DONE".to_string()
