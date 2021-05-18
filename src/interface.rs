@@ -209,14 +209,12 @@ pub fn list(db: Connection) -> Result<()> {
         "Time in pause"
     ]);
     for task in task_iter {
-        let task = task;
-
         table.add_row(Row::new(vec![
             cell!(task.position),
             match task.state() {
-                TaskState::Active => cell!(bFy->textwrap::fill(&task.description, 38)),
-                TaskState::Done => cell!(Fg->task.description),
-                TaskState::Pending => cell!(task.description),
+                TaskState::Active => cell!(bFG->textwrap::fill(&task.description, 38)),
+                TaskState::Done => cell!(Fg->textwrap::fill(&task.description, 38)),
+                TaskState::Pending => cell!(textwrap::fill(&task.description, 38)),
             },
             cell!(format_optional_time(task.started_at, "".to_string())),
             cell!(format_chrono_duration(task.estimated_duration)),
