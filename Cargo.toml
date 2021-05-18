@@ -5,6 +5,7 @@ authors = ["sergio garcia <sergio.garcia@gmail.com>"]
 edition = "2018"
 description = "The hyper minimalistic daily planner."
 license = "GPL-3.0"
+readme = "README.md"
 
 [dependencies]
 structopt = "0.3"
