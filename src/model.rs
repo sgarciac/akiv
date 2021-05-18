@@ -313,30 +313,10 @@ pub fn ellapsed_time(
         TaskState::Active => {
             Ok((clt_secs()? - task.started_at.unwrap()) - paused_time(&task, pauses)?)
         }
-        TaskState::Done => {
-            println!(
-                "{}",
-                (task.finished_at.unwrap() - task.started_at.unwrap())
-                    .num_microseconds()
-                    .unwrap()
-            );
-            println!(
-                "{}",
-                (paused_time(&task, pauses)?).num_microseconds().unwrap()
-            );
-            println!(
-                "{}",
-                ((task.finished_at.unwrap() - task.started_at.unwrap())
-                    - paused_time(&task, pauses)?)
-                .num_microseconds()
-                .unwrap()
-            );
-            Ok(std::cmp::max(
-                Duration::seconds(0),
-                (task.finished_at.unwrap() - task.started_at.unwrap())
-                    - paused_time(&task, pauses)?,
-            ))
-        }
+        TaskState::Done => Ok(std::cmp::max(
+            Duration::seconds(0),
+            (task.finished_at.unwrap() - task.started_at.unwrap()) - paused_time(&task, pauses)?,
+        )),
     }
 }
 
