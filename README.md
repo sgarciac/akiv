@@ -59,20 +59,24 @@ The following fields are printed:
 
 At any time the user is either working or not working on her
 tasks. ```akiv start``` and ```akiv stop``` switch from one state to
-the other.
+the other. Notice that the user is not working by default, you need to explicitely start working
+after adding some tasks.
 
 If no task has been started, ```start``` will also set the first not
 started task in the list as the active task. The active task is displayed in bright green. 
 
+![Active task](screenshots/list-2.png?raw=true)
+
 If however the user is not working, it will be purple.
+
+![Active task - not working](screenshots/list-3.png?raw=true)
 
 ### Next
 
 When the user finishes a task, ```akiv next``` moves to the next
 task. Already done tasks are displayed in regular green.
 
-
-
+![Done tasks](screenshots/list-4.png?raw=true)
 
 
 
