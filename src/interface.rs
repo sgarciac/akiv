@@ -57,6 +57,9 @@ pub fn add_task(
 /// Finishes the current task and starts the next, if any. The full
 /// behavior of 'next' is described as follows:
 ///
+/// 0. If there is no active task, and work state is "stopped", AND there
+///    are not started tasks, if starts the next not started one.
+///
 /// 1. If the work state is "stopped", nothing happens.
 ///
 /// 2. The active tasks is finished.
@@ -64,13 +67,26 @@ pub fn add_task(
 /// 3. If there are not started tasks, starts the next one.
 pub fn next(db: Connection) -> Result<()> {
     let state = model::current_work_state(&db)?;
+    let currently_running_task_option = model::active_task(&db)?;
 
     if matches!(state, WorkState::Stopped) {
+
+        // If its stopped and there are no active tasks, start the next.
+        // This happens either at the beginning of the day or after a task
+        // was added after all tasks have been completed.
+        if currently_running_task_option.is_none() {
+            let first_not_started_task_option = model::first_not_started_task(&db)?;
+            if let Some(first_not_started_task) = first_not_started_task_option {
+                model::switch_work_state(&db)?;
+                model::start_task(&db, first_not_started_task.position)?;
+                return Ok(())
+            }
+        }
         bail!("Work is stopped. Use 'akiv start' before moving to next task.");
     }
 
     // At this point there should be an active task.
-    let currently_running_task = model::active_task(&db)?.unwrap();
+    let currently_running_task = currently_running_task_option.unwrap();
 
     // Stop the currently running task:
     model::finish_task(&db, currently_running_task.position)?;
@@ -188,12 +204,6 @@ pub fn list(db: Connection) -> Result<()> {
 
     let pauses = model::stopped_ranges(&db)?;
 
-    // NOT STARTED
-    //let mut stmt = db.prepare("SELECT id, day, description, position, created_at, started_at, finished_at, estimated_duration FROM task WHERE day = DATE('now','localtime') ORDER BY position")?;
-
-    //let task_iter = stmt.query_map([], |row| {
-    //    return model::task_from_row(row);
-    //})?;
     let work_state = model::current_work_state(&db)?;
     let tasks = model::tasks(&db)?;
     let task_iter = tasks.iter();
@@ -207,8 +217,9 @@ pub fn list(db: Connection) -> Result<()> {
         "exp. duration",
         "ellapsed",
         "exp. end time",
-        "Time in pause"
+        "pause time"
     ]);
+
     for task in task_iter {
         let etime: Duration = model::ellapsed_time(&task, &pauses)?;
 
@@ -245,16 +256,16 @@ pub fn list(db: Connection) -> Result<()> {
                     - (model::paused_time(&task, &pauses)?);
                 unfinished_tasks_estimated_duration = unfinished_tasks_estimated_duration
                     + std::cmp::max(task.estimated_duration - worked_time, Duration::seconds(0));
-                println!("{}", unfinished_tasks_estimated_duration)
             }
         }
     }
 
     table.printstd();
-
-    match work_state {
-        WorkState::Running => println!("Current state: Running."),
-        WorkState::Stopped => println!("Current state: Stopped."),
+    let first_not_started_option = model::first_not_started_task(&db)?;
+    if let Some(first_not_started) = first_not_started_option {
+        if first_not_started.position == 1 {
+            println!("You have not yet started your work for the day. Type 'akiv start'.");
+        }
     }
 
     Ok(())
