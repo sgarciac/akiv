@@ -1,7 +1,7 @@
 # Akiv, the hyper minimalistic daily planner
 
 Akiv helps you and keep a list of tasks to be done during the
-day. When presented with a choice between usefulness and simplicity,
+day. When presented with a choice between a feature and simplicity,
 we choose simplicity.
 
 Akiv is so simple its usefulness is doubtful.
