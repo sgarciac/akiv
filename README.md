@@ -27,7 +27,7 @@ akiv add "Finish writing the README" "20 minutes"
 1. Finish writing the README (20m)
 ```
 
-Adds a new task at the end of the list. It takes two mandatory
+```akiv add``` Adds a new task at the end of the list. It takes two mandatory
 parameters: a description and an estimated time to complete (see
 [valid duration
 strings](https://www.freedesktop.org/software/systemd/man/systemd.time.html#Parsing%20Time%20Spans)).
