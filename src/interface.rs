@@ -14,14 +14,13 @@ use chrono::{DateTime, Duration, Local};
 use humantime::format_duration;
 use prettytable::{Row, Table};
 use rusqlite::Connection;
-use textwrap;
 
 /// Adds a task to the current day.
 ///
 /// - If 'at' is defined, it attempts to add the task at that
-/// position. If 'at' is larger than len(tasks) + 1, it will be
-/// replaced by len(tasks) + 1, (that is, after the last one).  If the
-/// 'at' is zero or less, it will be replaced by 1 (the first task.)
+///   position. If 'at' is larger than len(tasks) + 1, it will be
+///   replaced by len(tasks) + 1, (that is, after the last one).  If the
+///   'at' is zero or less, it will be replaced by 1 (the first task.)
 ///
 /// Adding a task does not set the current work state to "running".
 pub fn add_task(
@@ -51,7 +50,7 @@ pub fn add_task(
         format_chrono_duration(estimated_duration)
     );
     //list(journal_path);
-    return Ok(());
+    Ok(())
 }
 
 /// Finishes the current task and starts the next, if any. The full
@@ -99,7 +98,7 @@ pub fn next(db: Connection) -> Result<()> {
         model::switch_work_state(&db)?;
     }
 
-    return Ok(());
+    Ok(())
 }
 
 /// Removes the task at the given position.
@@ -150,7 +149,7 @@ pub fn start(db: Connection) -> Result<()> {
         }
     }
     println!("Started!");
-    return Ok(());
+    Ok(())
 }
 
 /// Set the current work state to stopped.
@@ -163,7 +162,7 @@ pub fn stop(db: Connection) -> Result<()> {
             println!("Pause!")
         }
     }
-    return Ok(());
+    Ok(())
 }
 
 ///
@@ -191,7 +190,7 @@ pub fn pauses(db: Connection) -> Result<()> {
     }
 
     table.printstd();
-    return Ok(());
+    Ok(())
 }
 
 ///
@@ -219,9 +218,9 @@ pub fn list(db: Connection) -> Result<()> {
         "exp. end time",
         "pause time"
     ]);
-
+ 
     for task in task_iter {
-        let etime: Duration = model::ellapsed_time(&task, &pauses)?;
+        let etime: Duration = model::ellapsed_time(task, &pauses)?;
 
         table.add_row(Row::new(vec![
             cell!(task.position),
@@ -241,19 +240,19 @@ pub fn list(db: Connection) -> Result<()> {
                 cell!(format_chrono_duration(etime))
             },
             cell!(format_optional_time(
-                model::estimated_end_time(&task, unfinished_tasks_estimated_duration, &pauses)?,
+                model::estimated_end_time(task, unfinished_tasks_estimated_duration, &pauses)?,
                 "DONE".to_string()
             )),
-            cell!(format_chrono_duration(model::paused_time(&task, &pauses)?)),
+            cell!(format_chrono_duration(model::paused_time(task, &pauses)?)),
         ]));
 
-        if task.finished_at == None {
-            if task.started_at == None {
+        if task.finished_at.is_none() {
+            if task.started_at.is_none() {
                 unfinished_tasks_estimated_duration =
                     unfinished_tasks_estimated_duration + task.estimated_duration;
             } else {
                 let worked_time = (current_time - task.started_at.unwrap())
-                    - (model::paused_time(&task, &pauses)?);
+                    - (model::paused_time(task, &pauses)?);
                 unfinished_tasks_estimated_duration = unfinished_tasks_estimated_duration
                     + std::cmp::max(task.estimated_duration - worked_time, Duration::seconds(0));
             }
@@ -261,6 +260,7 @@ pub fn list(db: Connection) -> Result<()> {
     }
 
     table.printstd();
+     
     let first_not_started_option = model::first_not_started_task(&db)?;
     if let Some(first_not_started) = first_not_started_option {
         if first_not_started.position == 1 {

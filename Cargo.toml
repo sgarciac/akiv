@@ -15,5 +15,5 @@ humantime = "2.1.0"
 rusqlite = {version = "0.25.1", features=["chrono"]}
 directories = "3.0.2"
 anyhow = "1.0.40"
-prettytable-rs = "0.8"
+prettytable-rs = "0.10.0"
 textwrap = "0.13.4"
